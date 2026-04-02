@@ -1,0 +1,272 @@
+version: "3.9"
+
+networks:
+  log_platform_net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  elasticsearch_data:
+  redis_data:
+  kafka_data:
+  zookeeper_data:
+
+services:
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # DATABASE: PostgreSQL
+  # Stores: users, roles, rules, alerts, notification configs
+  # ──────────────────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: lip_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-logplatform}
+      POSTGRES_USER: ${POSTGRES_USER:-lipuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lippass}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - log_platform_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lipuser}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # SEARCH ENGINE: Elasticsearch
+  # Stores: raw + structured logs (time-series, full-text search)
+  # ──────────────────────────────────────────────────────────────────────────
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.0
+    container_name: lip_elasticsearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false        # Enable in production with TLS
+      - xpack.security.http.ssl.enabled=false
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g         # Tune for your machine (min 1g for dev)
+      - bootstrap.memory_lock=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    networks:
+      - log_platform_net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # LOG PROCESSING: Logstash
+  # Parses, enriches, and transforms raw logs before Elasticsearch indexing
+  # ──────────────────────────────────────────────────────────────────────────
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.12.0
+    container_name: lip_logstash
+    restart: unless-stopped
+    volumes:
+      - ../services/processing/logstash/pipeline:/usr/share/logstash/pipeline:ro
+      - ../services/processing/logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml:ro
+    ports:
+      - "5044:5044"   # Beats input
+      - "5000:5000"   # TCP input (direct log shipping)
+      - "9600:9600"   # Logstash monitoring API
+    environment:
+      - LS_JAVA_OPTS=-Xmx512m -Xms512m
+    networks:
+      - log_platform_net
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # VISUALIZATION: Kibana (Dev only - for direct ES inspection)
+  # ──────────────────────────────────────────────────────────────────────────
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.12.0
+    container_name: lip_kibana
+    restart: unless-stopped
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    networks:
+      - log_platform_net
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # CACHE + MESSAGE BROKER: Redis
+  # Used by: Celery (task queue), Django cache layer, session store
+  # ──────────────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: lip_redis
+    restart: unless-stopped
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - log_platform_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # MESSAGE STREAMING: Zookeeper + Kafka
+  # Optional at MVP — enables decoupled, scalable log ingestion at high volume
+  # ──────────────────────────────────────────────────────────────────────────
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: lip_zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+    networks:
+      - log_platform_net
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: lip_kafka
+    restart: unless-stopped
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - log_platform_net
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # BACKEND: Django + DRF
+  # Core brain: auth, rule engine, alert dispatch, ES query API
+  # ──────────────────────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: lip_backend
+    restart: unless-stopped
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - ../backend:/app          # Hot reload in dev
+    env_file:
+      - ../backend/.env
+    ports:
+      - "8000:8000"
+    networks:
+      - log_platform_net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # ASYNC WORKERS: Celery
+  # Runs background jobs: rule evaluation, alert delivery, anomaly polling
+  # ──────────────────────────────────────────────────────────────────────────
+  celery_worker:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: lip_celery_worker
+    restart: unless-stopped
+    command: celery -A config worker --loglevel=info --concurrency=4
+    volumes:
+      - ../backend:/app
+    env_file:
+      - ../backend/.env
+    networks:
+      - log_platform_net
+    depends_on:
+      - backend
+      - redis
+
+  celery_beat:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: lip_celery_beat
+    restart: unless-stopped
+    command: celery -A config beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    volumes:
+      - ../backend:/app
+    env_file:
+      - ../backend/.env
+    networks:
+      - log_platform_net
+    depends_on:
+      - backend
+      - redis
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # AI/ML MICROSERVICE: Python FastAPI
+  # Isolation Forest anomaly detection — runs as independent service
+  # ──────────────────────────────────────────────────────────────────────────
+  ai_service:
+    build:
+      context: ../services/ai-service
+      dockerfile: Dockerfile
+    container_name: lip_ai_service
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    env_file:
+      - ../services/ai-service/.env
+    networks:
+      - log_platform_net
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # FRONTEND: React + TypeScript (Vite dev server)
+  # ──────────────────────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: lip_frontend
+    restart: unless-stopped
+    volumes:
+      - ../frontend/src:/app/src    # Hot reload
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8000/api/v1
+    networks:
+      - log_platform_net
+    depends_on:
+      - backend
