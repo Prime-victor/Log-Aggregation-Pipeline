@@ -1,0 +1,12 @@
+http.host: "0.0.0.0"
+xpack.monitoring.enabled: false    # Enable with X-Pack license in prod
+
+# Pipeline settings
+pipeline.workers: 2                # Match CPU cores
+pipeline.batch.size: 125           # Events per worker per cycle
+pipeline.batch.delay: 50           # ms to wait for batch to fill
+
+# Dead letter queue: don't lose events on parse error
+dead_letter_queue.enable: true
+dead_letter_queue.max_bytes: 1gb
+path.dead_letter_queue: /var/logstash/dlq
