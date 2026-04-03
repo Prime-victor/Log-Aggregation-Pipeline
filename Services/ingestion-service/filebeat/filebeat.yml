@@ -1,0 +1,74 @@
+# ─── Filebeat: Log Shipper ────────────────────────────────────────────────────
+# Reads log files from disk and ships them to Logstash.
+# Run this as a sidecar or daemon on each host that generates logs.
+# ─────────────────────────────────────────────────────────────────────────────
+
+filebeat.inputs:
+
+  # ── Node.js application logs ──────────────────────────────────────────────
+  - type: filestream
+    id: nodejs-app-logs
+    enabled: true
+    paths:
+      - /var/log/apps/nodejs/*.log
+    fields:
+      service: "nodejs-app"
+      environment: "${APP_ENV:development}"
+    fields_under_root: true        # Promote to root, not nested under "fields"
+    parsers:
+      - ndjson:
+          target: ""               # Parse JSON into root (flat structure)
+          add_error_key: true
+
+  # ── Django application logs ────────────────────────────────────────────────
+  - type: filestream
+    id: django-app-logs
+    enabled: true
+    paths:
+      - /var/log/apps/django/*.log
+    fields:
+      service: "django-backend"
+      environment: "${APP_ENV:development}"
+    fields_under_root: true
+    parsers:
+      - ndjson:
+          target: ""
+          add_error_key: true
+
+  # ── Nginx access logs ──────────────────────────────────────────────────────
+  - type: filestream
+    id: nginx-access-logs
+    enabled: true
+    paths:
+      - /var/log/nginx/access.log
+    fields:
+      service: "nginx"
+      log_type: "access"
+    fields_under_root: true
+
+# ─── Output: Ship to Logstash ────────────────────────────────────────────────
+output.logstash:
+  hosts: ["${LOGSTASH_HOST:logstash}:5044"]
+  loadbalance: true                # Round-robin across Logstash nodes
+  worker: 2
+
+# ─── Processors (lightweight transforms before shipping) ──────────────────────
+processors:
+  - add_host_metadata:             # Adds hostname, IP, OS info
+      when.not.contains.tags: forwarded
+  - drop_fields:
+      fields: ["agent.ephemeral_id", "agent.hostname", "agent.id"]
+      ignore_missing: true
+
+# ─── Internal registry ────────────────────────────────────────────────────────
+# Tracks file read positions so Filebeat resumes after restart
+filebeat.registry.path: /var/lib/filebeat
+
+# ─── Logging ──────────────────────────────────────────────────────────────────
+logging.level: info
+logging.to_files: true
+logging.files:
+  path: /var/log/filebeat
+  name: filebeat.log
+  rotateeverybytes: 10485760      # 10MB
+  keepfiles: 5
