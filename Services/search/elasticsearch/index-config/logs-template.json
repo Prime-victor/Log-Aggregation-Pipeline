@@ -1,0 +1,44 @@
+{
+  "index_patterns": ["logs-*"],
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0,
+      "refresh_interval": "5s",
+      "index.lifecycle.name": "logs-policy",
+      "index.lifecycle.rollover_alias": "logs"
+    },
+    "mappings": {
+      "dynamic": "true",
+      "dynamic_date_formats": ["ISO8601", "yyyy-MM-dd HH:mm:ss"],
+      "properties": {
+        "@timestamp":    { "type": "date" },
+        "level":         { "type": "keyword" },
+        "severity":      { "type": "integer" },
+        "service":       { "type": "keyword" },
+        "environment":   { "type": "keyword" },
+        "trace_id":      { "type": "keyword" },
+        "user_id":       { "type": "keyword" },
+        "log_message":   { "type": "text", "analyzer": "standard",
+                           "fields": { "keyword": { "type": "keyword", "ignore_above": 256 } } },
+        "error_message": { "type": "text",
+                           "fields": { "keyword": { "type": "keyword", "ignore_above": 512 } } },
+        "stack_trace":   { "type": "text", "index": false },
+        "request_path":  { "type": "keyword" },
+        "http_method":   { "type": "keyword" },
+        "status_code":   { "type": "integer" },
+        "duration_ms":   { "type": "float" },
+        "client_ip":     { "type": "ip" },
+        "geoip": {
+          "properties": {
+            "location":      { "type": "geo_point" },
+            "city_name":     { "type": "keyword" },
+            "country_name":  { "type": "keyword" }
+          }
+        }
+      }
+    }
+  },
+  "priority": 200,
+  "_meta": { "description": "Log Intelligence Platform — core log template" }
+}
