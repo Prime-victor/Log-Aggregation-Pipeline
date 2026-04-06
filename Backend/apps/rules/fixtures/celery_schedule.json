@@ -1,0 +1,24 @@
+[
+  {
+    "model": "django_celery_beat.periodictask",
+    "pk": 1,
+    "fields": {
+      "name": "Evaluate All Rules (every 60s)",
+      "task": "rules.evaluate_all_rules",
+      "interval": 1,
+      "enabled": true,
+      "description": "Main rule engine evaluation loop"
+    }
+  },
+  {
+    "model": "django_celery_beat.periodictask",
+    "pk": 2,
+    "fields": {
+      "name": "Poll AI Service for Anomalies (every 5 min)",
+      "task": "anomalies.poll_ai_service",
+      "interval": 2,
+      "enabled": true,
+      "description": "Fetch anomaly detections from ML microservice"
+    }
+  }
+]
