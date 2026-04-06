@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html>
 <head>
   <style>
@@ -20,7 +20,7 @@
 <body>
 <div class="container">
   <div class="header">
-    <h2>{{ emoji }} Log Intelligence Platform — Alert</h2>
+    <h2>{{ emoji }} Log Intelligence Platform -- Alert</h2>
   </div>
   <div class="body severity-{{ alert.severity }}">
     <h3>{{ rule.name }}</h3>
@@ -43,17 +43,17 @@
 
     <hr>
     <p><strong>Service:</strong> {{ alert.service }}</p>
-    <p><strong>Window:</strong> {{ alert.window_start }} → {{ alert.window_end }}</p>
+    <p><strong>Window:</strong> {{ alert.window_start }} -> {{ alert.window_end }}</p>
     <p><strong>Time:</strong> {{ alert.created_at }}</p>
 
     <p>
       <a href="http://your-domain.com/alerts/{{ alert.id }}"
          style="background:#e74c3c;color:white;padding:10px 20px;border-radius:4px;text-decoration:none;">
-        View Alert →
+        View Alert ->
       </a>
     </p>
   </div>
-  <div class="footer">Log Intelligence Platform · You're receiving this because you're an admin or analyst.</div>
+  <div class="footer">Log Intelligence Platform. You're receiving this because you're an admin or analyst.</div>
 </div>
 </body>
 </html>
