@@ -31,7 +31,7 @@ from anomaly_detection.feature_extractor import FeatureExtractor
 logger = logging.getLogger(__name__)
 
 MODEL_PATH = Path(os.getenv("MODEL_PATH", "/app/models/isolation_forest.pkl"))
-SCALER_PATH = Path(os.getenv("MODEL_PATH", "/app/models/scaler.pkl"))
+SCALER_PATH = Path(os.getenv("SCALER_PATH", "/app/models/scaler.pkl"))
 
 # Contamination = expected fraction of anomalies in training data.
 # 0.05 = "we expect 5% of our historical windows to be anomalous"
