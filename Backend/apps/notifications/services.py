@@ -1,5 +1,5 @@
-"""
-Notification Service — dispatches alerts via multiple channels.
+﻿"""
+Notification Service -- dispatches alerts via multiple channels.
 
 Strategy pattern: each channel is an independent handler.
 Adding a new channel (PagerDuty, Teams, SMS) means adding one class.
@@ -16,10 +16,10 @@ from apps.alerts.models import Alert
 logger = logging.getLogger(__name__)
 
 SEVERITY_EMOJI = {
-    "CRITICAL": "🚨",
-    "HIGH":     "🔴",
-    "MEDIUM":   "🟡",
-    "LOW":      "🔵",
+    "CRITICAL": "!!",
+    "HIGH":     "!",
+    "MEDIUM":   "~",
+    "LOW":      "-",
 }
 
 SEVERITY_COLOR = {
@@ -40,10 +40,10 @@ class NotificationService:
         if settings.SLACK_WEBHOOK_URL:
             self._send_slack(alert)
 
-    # ── Email ────────────────────────────────────────────────────────────────
+    # ---- Email ----
 
     def _send_email(self, alert: Alert):
-        emoji    = SEVERITY_EMOJI.get(alert.severity, "⚠️")
+        emoji    = SEVERITY_EMOJI.get(alert.severity, "!")
         subject  = f"{emoji} [{alert.severity}] Alert: {alert.rule.name}"
 
         # Render HTML template
@@ -76,12 +76,12 @@ class NotificationService:
         ).values_list("email", flat=True)
         return list(admins_and_analysts)
 
-    # ── Slack ────────────────────────────────────────────────────────────────
+    # ---- Slack ----
 
     def _send_slack(self, alert: Alert):
         """Send a rich Slack Block Kit message."""
         color = SEVERITY_COLOR.get(alert.severity, "#808080")
-        emoji = SEVERITY_EMOJI.get(alert.severity, "⚠️")
+        emoji = SEVERITY_EMOJI.get(alert.severity, "!")
 
         payload = {
             "attachments": [
