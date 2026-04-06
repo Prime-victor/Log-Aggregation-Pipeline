@@ -5,17 +5,6 @@
 
 ---
 
-## Document Index
-
-| File | Phases Covered | Key Topics |
-|------|---------------|------------|
-| `PHASE_01_SETUP.md` | Phase 1 | Docker Compose, Django init, React scaffold, all config files |
-| `PHASE_02_03_INGESTION_AND_BACKEND.md` | Phases 2–3 | Filebeat, Logstash pipeline, ES index templates, Django models, RBAC, URL routing |
-| `PHASE_04_05_06_QUERY_RULES_ASYNC.md` | Phases 4–6 | Log search API, aggregations, rule engine, Celery tasks |
-| `PHASE_07_08_09_10_ML_ALERTS_FRONTEND_PROD.md` | Phases 7–10 | Isolation Forest ML service, Slack/email alerts, React dashboard, Kubernetes |
-
----
-
 ## Architecture at a Glance
 
 ```
