@@ -1,0 +1,16 @@
+node modules
+node_modules/
+dist/
+build/
+*.log
+# Optional: Ignore environment variable files
+.env
+# Optional: Ignore IDE/editor specific files
+.vscode/
+.idea/
+# Optional: Ignore OS-specific files
+.DS_Store
+Thumbs.db
+# Optional: Ignore test coverage reports
+coverage/
+## Keep lock files tracked for reproducible installs
