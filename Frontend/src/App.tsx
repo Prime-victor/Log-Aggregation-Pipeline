@@ -364,7 +364,6 @@ const App = () => {
             ) : (
               <p className="muted">No volume data yet.</p>
             )}
-            </div>
           </div>
         </Section>
 
